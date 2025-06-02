@@ -28,6 +28,7 @@ bandwidth = 1e-4
 
 # Confidence level
 alpha = 0.95
+alpha_values = [0.95, 0.96, 0.97, 0.98, 0.99]
 
 # LGD Shape parameters
 LGD_a, LGD_b = 2, 5
@@ -121,22 +122,54 @@ def var_varc_es_esc_pmc(d, alpha, LGD_a, LGD_b, simulation_runs, bandwidth=1e-4)
     
     return VaR_mean, VaR_se, VaRC_mean, VaRC_se, Sample_varc_mean, ES_mean, ES_se, ESC_mean, ESC_se, Sample_esc_mean
 
-Result = var_varc_es_esc_pmc(d, alpha, LGD_a, LGD_b, simulation_runs)
 
+Result = [var_varc_es_esc_pmc(d, alpha, LGD_a, LGD_b, simulation_runs) for alpha in alpha_values]
+VaRs, VaR_SEs, VaRCs, VaRC_SEs, Sample_VaRCs, ESs, ES_SEs, ESCs, ESC_SEs, Sample_ESCs = zip(*Result)
 
+Risk_Measures = pd.DataFrame({
+    'VaR' : VaRs,
+    'VaR S.E.' : VaR_SEs,
+    'ES' : ESs,
+    'ES S.E.' : ES_SEs
+    }, index=alpha_values).T
 
+Risk_Measures.to_csv('Risk_Measures_Plain MC_Benchmark.csv')
 
+Risk_Contributions = pd.DataFrame({
+    'VaRC 0.95' : VaRCs[0],
+    'VaRC S.E. 0.95' : VaRC_SEs[0],
+    'VaRC 0.95 Samples' : Sample_VaRCs[0],
+    'ESC 0.95' : ESCs[0],
+    'ESC S.E. 0.95' : ESC_SEs[0],
+    'ESC 0.95 Samples': Sample_ESCs[0],
+    
+    'VaRC 0.96' : VaRCs[1],
+    'VaRC S.E. 0.96' : VaRC_SEs[1],
+    'VaRC 0.96 Samples' : Sample_VaRCs[1],
+    'ESC 0.96' : ESCs[1],
+    'ESC S.E. 0.96' : ESC_SEs[1],
+    'ESC 0.96 Samples': Sample_ESCs[1],
+    
+    'VaRC 0.97' : VaRCs[2],
+    'VaRC S.E. 0.97' : VaRC_SEs[2],
+    'VaRC 0.97 Samples' : Sample_VaRCs[2],
+    'ESC 0.97' : ESCs[2],
+    'ESC S.E. 0.97' : ESC_SEs[2],
+    'ESC 0.97 Samples': Sample_ESCs[2],
+    
+    'VaRC 0.98' : VaRCs[3],
+    'VaRC S.E. 0.98' : VaRC_SEs[3],
+    'VaRC 0.98 Samples' : Sample_VaRCs[3],
+    'ESC 0.98' : ESCs[3],
+    'ESC S.E. 0.98' : ESC_SEs[3],
+    'ESC 0.98 Samples': Sample_ESCs[3],
+    
+    'VaRC 0.99' : VaRCs[4],
+    'VaRC S.E. 0.99' : VaRC_SEs[4],
+    'VaRC 0.99 Samples' : Sample_VaRCs[4],
+    'ESC 0.99' : ESCs[4],
+    'ESC S.E. 0.99' : ESC_SEs[4],
+    'ESC 0.99 Samples': Sample_ESCs[4],
+    }, index=['Obligor 1','Obligor 2','Obligor 3','Obligor 4','Obligor 5','Obligor 6','Obligor 7','Obligor 8','Obligor 9','Obligor 10']).T
 
-
-
-
-
-
-
-
-
-
-
-
-
-
+Risk_Contributions.to_csv('Risk_Contributions_Plain MC_Benchmark.csv')
