@@ -21,7 +21,7 @@ d = 10
 n_repetitions = 10
 
 # Simulation paths
-simulation_runs = 100000 # 10000000 一千万是极限了 再算restarting kernal了
+simulation_runs = 10000000 # 10000000 一千万是极限了 再算restarting kernal了
 
 # Bandwidth
 bandwidth = 1e-4
