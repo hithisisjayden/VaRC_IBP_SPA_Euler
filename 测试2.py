@@ -5,11 +5,12 @@ Created on Sun May 18 20:13:23 2025
 
 @author: jaydenwang
 """
-
+import pandas as pd
 import numpy as np
 from scipy.stats import norm, beta
 import matplotlib.pyplot as plt
 import time
+import csv
 
 np.random.seed(0)
 
@@ -71,7 +72,8 @@ def mean_se(array):
     se = np.std(array) / np.sqrt(len(array))
     return mean, se
 
-# def var_varc_pmc(d, alpha, LGD_a, LGD_b, simulation_runs, bandwidth=1e-4):
+'''
+def var_varc_pmc(d, alpha, LGD_a, LGD_b, simulation_runs, bandwidth=1e-4):
     
     start_time_pmc = time.time()
     
@@ -125,7 +127,7 @@ def mean_se(array):
     # print(f"Time taken for PMC (VaRC_PMC): {end_time_varc_calc - start_time_varc_calc:.2f} seconds")
     
     return VaR, VaR_se, VaRC, VaRC_se, sample_num
-
+'''
 def var_varc_pmc(d, alpha, LGD_a, LGD_b, simulation_runs, bandwidth=1e-4):
     start_time = time.time()
     
@@ -170,18 +172,41 @@ def calculate_numerator(d, a, alpha, LGD_a, LGD_b, simulation_runs):
     eta_L = np.random.normal(size=(simulation_runs, d))
     eta_D = np.random.normal(size=(simulation_runs, d))
     
-    def L_minus_obligor(d, L, epsilon):
+    X = default_driver(Z_D, eta_D)
+    D = (X > x_threshold).astype(int)
+    # D = np.ones((simulation_runs,d))
+    def L_minus_obligor(d, L, epsilon, D):
         L_minus_i = []
         for i in range(d):
             L_minus_i.append(L - epsilon[:,i] * D[:,i])
         L_minus_i = np.array(L_minus_i).T
         return L_minus_i
     
+    # bbP
     def L_minus_cdf(d, a, L_minus_i, epsilon, D):
+        
         bbP = []
         for i in range(d):
             bbP.append(np.sum((L_minus_i[:,i] <= (a-epsilon[:,i])) & (D[:,i]==1)) / np.sum((D[:,i]==1)))
         bbP = np.array(bbP)
+        return bbP
+    
+    def calculate_bbP(d, a, L_minus_i, epsilon, simulation_runs):
+        
+        # Z_D = np.random.normal(size=simulation_runs)
+        # eta_D = np.random.normal(size=(simulation_runs, d))
+        # X = default_driver(Z_D, eta_D)
+        # # D 1000,1
+        # D = (X > x_threshold).astype(int)
+        # L = np.sum(epsilon * D, axis = 1)
+        # L_minus = L_minus_obligor(d, L, epsilon, D)  
+        
+        bbP = np.zeros((simulation_runs, d))
+        
+        for i in range(d):
+            for j in range(simulation_runs):
+                bbP[j,i] = (np.sum((L_minus_i[:,i] <= (a-epsilon[j,i])) & (D[:,i]==1)) / np.sum((D[:,i]==1)))
+        
         return bbP
     
     def conditional_density(d, LGD_a, LGD_b, epsilon, z_L):
@@ -224,26 +249,31 @@ def calculate_numerator(d, a, alpha, LGD_a, LGD_b, simulation_runs):
     
     inner_expectation = [] # E[ | Z]
     for z_L in Z_L:
-        z_L_copy = z_L
+        z_L_copy = z_L 
         z_L = np.full(simulation_runs, z_L)
         Y = loss_driver(z_L, eta_L)
-        X = default_driver(Z_D, eta_D)
         epsilon = beta.ppf(norm.cdf(Y), LGD_a, LGD_b)
-        # epsilon = np.clip(epsilon, 1e-6, 1 - 1e-6)
-        D = (X > x_threshold).astype(int)
+
         L = np.sum(epsilon * D, axis = 1)
-        L_minus_i = L_minus_obligor(d, L, epsilon)
-        bbP = L_minus_cdf(d, a, L_minus_i, epsilon, D)
-        bbP_1 = L_minus_cdf(d, a, L_minus_i, np.full((simulation_runs,d),0.999), D) # e_i cannot be 1
+        L_minus_i = L_minus_obligor(d, L, epsilon, D)
+        # bbP = L_minus_cdf(d, a, L_minus_i, epsilon, D)
+        # bbP_1 = L_minus_cdf(d, a, L_minus_i, np.full((simulation_runs,d),0.999), D) # e_i cannot be 1
         # bbP = bbP_1 = 0.95
-        if a > 1:
-            A = - bbP_1 * 0.999 * conditional_density_one(LGD_a, LGD_b, 0.999, z_L_copy)
-        else:
-            A = - L_minus_cdf(d, a, L_minus_i, np.full((simulation_runs,d),a), D) * np.full((simulation_runs,d),a) * conditional_density(d, LGD_a, LGD_b, np.full((simulation_runs,d),a), z_L_copy)
+        bbP = calculate_bbP(d, a, L_minus_i, epsilon, simulation_runs)
+        # if a > 1:
+        #     A = - bbP_1 * 0.999 * conditional_density_one(LGD_a, LGD_b, 0.999, z_L_copy)
+        # else:
+        #     A = - L_minus_cdf(d, a, L_minus_i, np.full((simulation_runs,d),a), D) * np.full((simulation_runs,d),a) * conditional_density(d, LGD_a, LGD_b, np.full((simulation_runs,d),a), z_L_copy)
+        
         A = 0
-        B_inner = bbP * (1 + epsilon * conditional_density_derivative_inner_expectation(d, LGD_a, LGD_b, epsilon, z_L))
+        Term = 1 + epsilon * conditional_density_derivative_inner_expectation(d, LGD_a, LGD_b, epsilon, z_L)
+        # Term[Term < 0] = 0
+        B_inner = bbP * Term      
         B = np.mean(B_inner, axis = 0)
         inner_expectation.append(A + B) 
+    # print(np.shape(bbP))
+    # print(np.shape(Term))
+    # print(bbP)
     inner_expectation = np.array(inner_expectation)
     return p * np.mean(inner_expectation, axis=0)
 
@@ -261,19 +291,29 @@ def varc_IBP_Euler(d, a, alpha, LGD_a, LGD_b, simulation_runs):
     # return numerator
 
 # VaRCs_Benchmark
-# VaRCs_pmc = np.array([0.0568,0.1589,0.2315,0.3154,0.3491,0.3906,0.4070,0.4344,0.4341,0.4334])
+VaRCs_pmc = np.array([0.0568,0.1589,0.2315,0.3154,0.3491,0.3906,0.4070,0.4344,0.4341,0.4334])
 
-VaR_pmc, VaR_se_pmc, VaRCs_pmc, VaRCs_se_pmc, sample_num_pmc = var_varc_pmc(d, alpha, LGD_a, LGD_b, 10000000)
-VaRCs_IBP_Euler = varc_IBP_Euler(d, VaR_pmc, alpha, LGD_a, LGD_b, simulation_runs)
-Ratio = VaRCs_pmc / VaRCs_IBP_Euler
+# VaR_pmc, VaR_se_pmc, VaRCs_pmc, VaRCs_se_pmc, sample_num_pmc = var_varc_pmc(d, alpha, LGD_a, LGD_b, 10000000)
+# VaRCs_IBP_Euler = varc_IBP_Euler(d, a, alpha, LGD_a, LGD_b, simulation_runs)
+VaRCs_IBP_Euler = np.mean(np.array([varc_IBP_Euler(d, a, alpha, LGD_a, LGD_b, simulation_runs) for _ in range(n_repetitions)]), axis=0)
+# Ratio = VaRCs_pmc / VaRCs_IBP_Euler
+
 print(VaRCs_pmc)
 print(VaRCs_IBP_Euler)
 print(np.sum(VaRCs_IBP_Euler))
-print(Ratio)
+# print(Ratio)
 
-plt.plot(np.array([0.0568,0.1589,0.2315,0.3154,0.3491,0.3906,0.4070,0.4344,0.4341,0.4334]))
+# plt.plot(np.array([0.0568,0.1589,0.2315,0.3154,0.3491,0.3906,0.4070,0.4344,0.4341,0.4334]))
 plt.plot(VaRCs_pmc)
 plt.plot(VaRCs_IBP_Euler)
 
+def save_arrays_csv_method2(array1, array2, filename='output.csv'):
+    df = pd.DataFrame({
+        'Array1': array1,
+        'Array2': array2
+    })
+    df.to_csv(filename, index=False)
+
+save_arrays_csv_method2(VaRCs_pmc, VaRCs_IBP_Euler, 'VaRC_IBP_Euler.csv')
 
 
