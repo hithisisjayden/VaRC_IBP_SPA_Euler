@@ -38,6 +38,9 @@ rho = np.sqrt(0.5)
 # Benchmark VaR 0.95
 a = 3.2104
 
+# # Benchmark VaR 0.99
+# a = 4.2171
+
 # Default probability function
 def default_probability(d):
     # k_values = np.arange(1, d + 1)  
@@ -72,62 +75,6 @@ def mean_se(array):
     se = np.std(array) / np.sqrt(len(array))
     return mean, se
 
-'''
-def var_varc_pmc(d, alpha, LGD_a, LGD_b, simulation_runs, bandwidth=1e-4):
-    
-    start_time_pmc = time.time()
-    
-    Results = [generate_samples_pmc(d, alpha, LGD_a, LGD_b, simulation_runs) for _ in range(n_repetitions)]
-    # end_time_pmc = time.time()
-    epsilon, D, L = zip(*Results) # type: tuple
-    VaRs = np.array([np.percentile(i, alpha * 100) for i in L])
-    VaR, VaR_se = mean_se(VaRs)   
-    
-    end_time_pmc = time.time()
-    print(f"Time taken for PMC (VaR_PMC): {end_time_pmc - start_time_pmc:.2f} seconds")
-    
-    start_time_varc_calc = time.time()
-
-    LGDs_per_repetition = tuple(eps_rep * D_rep for eps_rep, D_rep in zip(epsilon, D))
-    
-    VaRCs_list_per_rep = []
-    sample_num = []
-    for k in range(n_repetitions):
-        L_k, Li_k, a_k = L[k], LGDs_per_repetition[k], VaRs[k]
-        
-        mask_k = (L_k >= a_k - bandwidth) & (L_k <= a_k + bandwidth)
-        sample_num.append(np.sum(mask_k))
-        conditional_Li_k = Li_k[mask_k]
-        if conditional_Li_k.shape[0] > 0:
-            VaRCs_list_per_rep.append(np.mean(conditional_Li_k, axis=0))
-        else:
-            VaRCs_list_per_rep.append(np.full(d, np.nan))
-            
-    VaRCs_matrix = np.array(VaRCs_list_per_rep) # Shape: (n_repetitions, d)
-
-    # Initialize arrays for final VaRC means and SEs
-    VaRC_final_means = np.full(d, np.nan)
-    VaRC_final_ses = np.full(d, np.nan)
-
-    # Calculate mean and SE for each obligor's VaRC estimates using your mean_se function
-    for i in range(d): # For each obligor (column i)
-        varc_estimates_for_obligor_i = VaRCs_matrix[:, i]
-        valid_estimates = varc_estimates_for_obligor_i[~np.isnan(varc_estimates_for_obligor_i)]
-        
-        if len(valid_estimates) > 0:
-            # Apply your mean_se function to the 1D array of valid estimates for this obligor
-            mean_val, se_val = mean_se(valid_estimates)
-            VaRC_final_means[i] = mean_val
-            VaRC_final_ses[i] = se_val
-            
-    VaRC = VaRC_final_means
-    VaRC_se = VaRC_final_ses
-    sample_num = np.mean(np.array(sample_num))
-    # end_time_varc_calc = time.time()
-    # print(f"Time taken for PMC (VaRC_PMC): {end_time_varc_calc - start_time_varc_calc:.2f} seconds")
-    
-    return VaR, VaR_se, VaRC, VaRC_se, sample_num
-'''
 def var_varc_pmc(d, alpha, LGD_a, LGD_b, simulation_runs, bandwidth=1e-4):
     start_time = time.time()
     
@@ -168,12 +115,12 @@ def calculate_numerator(d, a, alpha, LGD_a, LGD_b, simulation_runs):
     x_threshold = norm.ppf(1-p)
     
     Z_L = np.random.normal(size=simulation_runs) # 10000 simulation_runs
-    Z_D = np.random.normal(size=simulation_runs)
-    eta_L = np.random.normal(size=(simulation_runs, d))
-    eta_D = np.random.normal(size=(simulation_runs, d))
+    # Z_D = np.random.normal(size=simulation_runs)
+    # eta_L = np.random.normal(size=(simulation_runs, d))
+    # eta_D = np.random.normal(size=(simulation_runs, d))
     
-    X = default_driver(Z_D, eta_D)
-    D = (X > x_threshold).astype(int)
+    # X = default_driver(Z_D, eta_D)
+    # D = (X > x_threshold).astype(int)
     # D = np.ones((simulation_runs,d))
     def L_minus_obligor(d, L, epsilon, D):
         L_minus_i = []
@@ -191,15 +138,15 @@ def calculate_numerator(d, a, alpha, LGD_a, LGD_b, simulation_runs):
         bbP = np.array(bbP)
         return bbP
     
-    def calculate_bbP(d, a, L_minus_i, epsilon, simulation_runs):
+    def calculate_bbP(d, D, L_minus_i, epsilon, simulation_runs):
         
-        # Z_D = np.random.normal(size=simulation_runs)
-        # eta_D = np.random.normal(size=(simulation_runs, d))
-        # X = default_driver(Z_D, eta_D)
-        # # D 1000,1
-        # D = (X > x_threshold).astype(int)
-        # L = np.sum(epsilon * D, axis = 1)
-        # L_minus = L_minus_obligor(d, L, epsilon, D)  
+        Z_D = np.random.normal(size=simulation_runs)
+        eta_D = np.random.normal(size=(simulation_runs, d))
+        X = default_driver(Z_D, eta_D)
+        # D 1000,1
+        D = (X > x_threshold).astype(int)
+        L = np.sum(epsilon * D, axis = 1)
+        L_minus_i = L_minus_obligor(d, L, epsilon, D)  
         
         bbP = np.zeros((simulation_runs, d))
         
@@ -248,32 +195,30 @@ def calculate_numerator(d, a, alpha, LGD_a, LGD_b, simulation_runs):
         return result
     
     inner_expectation = [] # E[ | Z]
-    for z_L in Z_L:
-        z_L_copy = z_L 
+    for z_L in Z_L:      
+        # z_L_copy = z_L 
         z_L = np.full(simulation_runs, z_L)
+        
+        Z_D = np.random.normal(size=simulation_runs)
+        eta_L = np.random.normal(size=(simulation_runs, d))
+        eta_D = np.random.normal(size=(simulation_runs, d))
+        
+        X = default_driver(Z_D, eta_D)
+        D = (X > x_threshold).astype(int)
+        
         Y = loss_driver(z_L, eta_L)
         epsilon = beta.ppf(norm.cdf(Y), LGD_a, LGD_b)
 
         L = np.sum(epsilon * D, axis = 1)
         L_minus_i = L_minus_obligor(d, L, epsilon, D)
-        # bbP = L_minus_cdf(d, a, L_minus_i, epsilon, D)
-        # bbP_1 = L_minus_cdf(d, a, L_minus_i, np.full((simulation_runs,d),0.999), D) # e_i cannot be 1
-        # bbP = bbP_1 = 0.95
-        bbP = calculate_bbP(d, a, L_minus_i, epsilon, simulation_runs)
-        # if a > 1:
-        #     A = - bbP_1 * 0.999 * conditional_density_one(LGD_a, LGD_b, 0.999, z_L_copy)
-        # else:
-        #     A = - L_minus_cdf(d, a, L_minus_i, np.full((simulation_runs,d),a), D) * np.full((simulation_runs,d),a) * conditional_density(d, LGD_a, LGD_b, np.full((simulation_runs,d),a), z_L_copy)
-        
+        bbP = calculate_bbP(d, D, L_minus_i, epsilon, simulation_runs)
+
         A = 0
         Term = 1 + epsilon * conditional_density_derivative_inner_expectation(d, LGD_a, LGD_b, epsilon, z_L)
-        # Term[Term < 0] = 0
         B_inner = bbP * Term      
         B = np.mean(B_inner, axis = 0)
         inner_expectation.append(A + B) 
-    # print(np.shape(bbP))
-    # print(np.shape(Term))
-    # print(bbP)
+
     inner_expectation = np.array(inner_expectation)
     return p * np.mean(inner_expectation, axis=0)
 
@@ -291,11 +236,27 @@ def varc_IBP_Euler(d, a, alpha, LGD_a, LGD_b, simulation_runs):
     # return numerator
 
 # VaRCs_Benchmark
+# 0.95
 VaRCs_pmc = np.array([0.0568,0.1589,0.2315,0.3154,0.3491,0.3906,0.4070,0.4344,0.4341,0.4334])
+VaRCs_se_pmc = np.array([0.0034, 0.0062, 0.0062, 0.0048, 0.0052, 0.0045, 0.0046, 0.0041, 0.0032, 0.0037])
+
+# # 0.99
+# VaRCs_pmc = np.array([0.1419, 0.2853, 0.3592, 0.4195, 0.4802, 0.4777, 0.5152, 0.5177, 0.5157, 0.5048])
+# VaRCs_se_pmc = np.array([0.0117, 0.0132, 0.0114, 0.0086, 0.0057, 0.0088, 0.0057, 0.0089, 0.0084, 0.0075])
+
 
 # VaR_pmc, VaR_se_pmc, VaRCs_pmc, VaRCs_se_pmc, sample_num_pmc = var_varc_pmc(d, alpha, LGD_a, LGD_b, 10000000)
 # VaRCs_IBP_Euler = varc_IBP_Euler(d, a, alpha, LGD_a, LGD_b, simulation_runs)
-VaRCs_IBP_Euler = np.mean(np.array([varc_IBP_Euler(d, a, alpha, LGD_a, LGD_b, simulation_runs) for _ in range(n_repetitions)]), axis=0)
+n_repetitions = 10
+
+VaRCs_IBP_Euler_outputs = np.array([varc_IBP_Euler(d, a, alpha, LGD_a, LGD_b, simulation_runs) for _ in range(n_repetitions)])
+
+VaRCs_IBP_Euler = np.zeros(d)
+VaRCs_se_IBP_Euler = np.zeros(d)
+for i in range(d):
+    VaRCs_IBP_Euler[i], VaRCs_se_IBP_Euler[i] = mean_se(VaRCs_IBP_Euler_outputs[:,i])
+    
+
 # Ratio = VaRCs_pmc / VaRCs_IBP_Euler
 
 print(VaRCs_pmc)
@@ -303,17 +264,66 @@ print(VaRCs_IBP_Euler)
 print(np.sum(VaRCs_IBP_Euler))
 # print(Ratio)
 
-# plt.plot(np.array([0.0568,0.1589,0.2315,0.3154,0.3491,0.3906,0.4070,0.4344,0.4341,0.4334]))
-plt.plot(VaRCs_pmc)
-plt.plot(VaRCs_IBP_Euler)
+# VaRC
+plt.figure(figsize=(12, 8), dpi = 300)
+x = ['1','2','3','4','5','6','7','8','9','10']
 
-def save_arrays_csv_method2(array1, array2, filename='output.csv'):
-    df = pd.DataFrame({
-        'Array1': array1,
-        'Array2': array2
-    })
-    df.to_csv(filename, index=False)
+plt.plot(x, VaRCs_pmc, 
+            color = 'blue',
+            linestyle='-.',
+            linewidth=2,
+            marker='o',
+            markersize=6,
+            label='Benchmark')
 
-save_arrays_csv_method2(VaRCs_pmc, VaRCs_IBP_Euler, 'VaRC_IBP_Euler.csv')
+plt.plot(x, VaRCs_IBP_Euler,  
+            color='orange',  
+            linestyle='--',
+            linewidth=2.5,
+            marker='^',
+            markersize=6,
+            label='IBP_Euler')
+
+plt.title('VaRC 0.95 of Plain MC and IBP_Euler', fontsize=14)
+plt.xlabel('Obligors', fontsize=12)
+plt.ylabel('VaRC', fontsize=12)
+plt.savefig('VaRC 0.95 of Plain MC and IBP_Euler.jpg')
+
+# VaRC_SE
+plt.figure(figsize=(12, 8), dpi = 300)
+x = ['1','2','3','4','5','6','7','8','9','10']
+
+plt.plot(x, VaRCs_se_pmc, 
+            color = 'blue',
+            linestyle='-.',
+            linewidth=2,
+            marker='o',
+            markersize=6,
+            label='Benchmark')
+
+plt.plot(x, VaRCs_se_IBP_Euler,  
+            color='orange',  
+            linestyle='--',
+            linewidth=2.5,
+            marker='^',
+            markersize=6,
+            label='IBP_Euler')
+
+plt.title('VaRC 0.95 S.E. of Plain MC and IBP_Euler', fontsize=14)
+plt.xlabel('Obligors', fontsize=12)
+plt.ylabel('VaRC S.E.', fontsize=12)
+
+plt.plot(VaRCs_se_pmc)
+plt.plot(VaRCs_se_IBP_Euler)
+plt.savefig('VaRC 0.95 S.E. of Plain MC and IBP_Euler.jpg')
+
+# def save_arrays_csv_method2(array1, array2, filename='output.csv'):
+#     df = pd.DataFrame({
+#         'Array1': array1,
+#         'Array2': array2
+#     })
+#     df.to_csv(filename, index=False)
+
+# save_arrays_csv_method2(VaRCs_pmc, VaRCs_IBP_Euler, 'VaRC_IBP_Euler.csv')
 
 
